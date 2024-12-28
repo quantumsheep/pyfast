@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "pyfast"
+version = "0.1.0"
+description = ""
+authors = ["Nathanael DEMACON <quantumsheep@users.noreply.github.com>"]
+readme = "README.md"
+packages = [
+    { include = "compiler", from = "src" },
+    { include = "parser", from = "src" },
+    { include = "pyfast", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+antlr4-python3-runtime = "^4.13.2"
+llvmlite = "^0.43.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
