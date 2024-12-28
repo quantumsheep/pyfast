@@ -15,8 +15,11 @@ class FeatureNotImplementedError(NotImplementedError):
             position = f"{source.fileName}{position}"
 
         lines: list[str] = source.strdata.split("\n")
-        lines = lines[ctx.start.line - 2 : ctx.stop.line]
-        lines.insert(2, " " * ctx.start.column + "\033[1m\033[31m^ feature not implemented\033[0m")
+        lines = lines[ctx.start.line - 2 : ctx.start.line + 1]
+        lines.insert(
+            2,
+            " " * ctx.start.column + "\033[1m\033[31m^ feature not implemented\033[0m",
+        )
         lines.insert(3, "")
 
         issue_lines = "\n".join(lines)
