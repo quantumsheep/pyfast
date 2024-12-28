@@ -12,8 +12,8 @@ class SyntaxError(Exception):
         self.message = message
 
 
-def parse_one(filepath: str) -> ProgramAST:
-    input_stream = FileStream(filepath)
+def parse(filename: str) -> ProgramAST:
+    input_stream = FileStream(filename)
     lexer = PythonLexer(input_stream)
     stream = CommonTokenStream(lexer)
     parser = PythonParser(stream)
@@ -24,16 +24,6 @@ def parse_one(filepath: str) -> ProgramAST:
 
     v = Visitor()
     program_ast = v.visitFile_input(tree)
-    program_ast.filepath = filepath
+    program_ast.filename = filename
 
     return program_ast
-
-
-def parse(files: list[str]) -> list[ProgramAST]:
-    asts = list[ProgramAST]()
-
-    for file in files:
-        ast = parse_one(file)
-        asts.append(ast)
-
-    return asts

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 @dataclass(kw_only=True)
 class ProgramAST:
-    filepath: str = ""
+    filename: str = ""
     statements: list[StatementAST]
 
 

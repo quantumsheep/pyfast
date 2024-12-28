@@ -98,7 +98,7 @@ class Scope:
 class IntermediateRepresentation:
     def __init__(self, program_ast: ast.ProgramAST):
         self.scope = Scope()
-        self.module = ir.Module(name=program_ast.filepath)
+        self.module = ir.Module(name=program_ast.filename)
 
         string_type = ir.IdentifiedStructType(self.module.context, name="libpy.str")
         string_type.set_body(
