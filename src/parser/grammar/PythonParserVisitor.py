@@ -700,6 +700,16 @@ class PythonParserVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by PythonParser#chained_slices.
+    def visitChained_slices(self, ctx:PythonParser.Chained_slicesContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by PythonParser#chained_slice.
+    def visitChained_slice(self, ctx:PythonParser.Chained_sliceContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by PythonParser#slice.
     def visitSlice(self, ctx:PythonParser.SliceContext):
         return self.visitChildren(ctx)

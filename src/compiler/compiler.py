@@ -1,5 +1,5 @@
-from compiler.ir import IntermediateRepresentation
-from parser.ast import ast
+from compiler.visitor import Visitor
+from parser import ast
 import llvmlite.binding as llvm
 
 
@@ -38,4 +38,7 @@ def compile(program: ast.ProgramAST):
     llvm.initialize_native_target()
     llvm.initialize_native_asmprinter()
 
-    print(IntermediateRepresentation(program).module)
+    visitor = Visitor()
+    visitor.walk_program(program)
+
+    print(visitor.module)

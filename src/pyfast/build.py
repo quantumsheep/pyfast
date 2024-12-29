@@ -1,5 +1,6 @@
 import os
 import sys
+from parser import ast
 from parser.driver import parse
 from typing import Any
 
@@ -20,6 +21,10 @@ def command() -> Command:
         long="--verbose",
         help="Enable verbose mode",
     )
+    command.add_flag(
+        long="--print-ast-tree",
+        help="Print AST tree",
+    )
 
     return command
 
@@ -32,12 +37,16 @@ def run(args: dict[str, Any]) -> None:
         print(f"File {filename} does not exist")
         sys.exit(1)
 
-    filename = os.path.relpath(filename, os.getcwd())
+    filename = os.path.abspath(filename)
 
     try:
-        ast = parse(filename)
-        print(ast)
-        print(compile(ast))
+        program_ast = parse(filename)
+
+        if args["print_ast_tree"]:
+            tree = ast.to_tree(program_ast)
+            print(tree.show(stdout=False, sorting=False))
+
+        print(compile(program_ast))
     except Exception as e:
         if verbose:
             raise e

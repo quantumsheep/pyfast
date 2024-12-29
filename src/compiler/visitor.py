@@ -1,9 +1,31 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+import os
+from parser import ast
+from parser.driver import parse
 
 from llvmlite import ir
 
-from parser.ast import ast
+
+class FeatureNotImplementedError(NotImplementedError):
+    def __init__(self, tree: ast.AST):
+        ast_type = type(tree).__name__
+
+        super().__init__(
+            tree.source_position.error(
+                f"feature not implemented in compiler ({ast_type})"
+            )
+        )
+
+
+class ModuleNotFoundError(Exception):
+    def __init__(self, tree: ast.AST, tried_paths: list[str]):
+        super().__init__(
+            tree.source_position.error(
+                "module not found. Tried: " + ", ".join(tried_paths)
+            )
+        )
 
 
 @dataclass(kw_only=True)
@@ -95,11 +117,18 @@ class Scope:
         self.values[name] = value
 
 
-class IntermediateRepresentation:
-    def __init__(self, program_ast: ast.ProgramAST):
+class Visitor:
+    def __init__(self):
         self.scope = Scope()
-        self.module = ir.Module(name=program_ast.filename)
 
+        env_pyfast_module_paths = os.environ.get("PYFAST_MODULE_PATH", "").split(":")
+
+        self.module_paths = set(env_pyfast_module_paths)
+        self.imported_modules = set[str]()
+
+        self.module = ir.Module(name="main.py")
+
+        # Type: str
         string_type = ir.IdentifiedStructType(self.module.context, name="libpy.str")
         string_type.set_body(
             PyTypeInt64.llvm_type,
@@ -108,43 +137,66 @@ class IntermediateRepresentation:
         self.module.context.identified_types[string_type.name] = string_type
         self.scope[string_type.name] = string_type
 
+        # Main function
         main_function_type = ir.FunctionType(PyTypeInt32.llvm_type, ())
         main_function = ir.Function(self.module, main_function_type, name="main")
 
         main_block = main_function.append_basic_block(name="entry")
-        main_builder = ir.IRBuilder(main_block)
+        self.main_builder = ir.IRBuilder(main_block)
+
+    def walk_program(self, program_ast: ast.ProgramAST):
+        if program_ast.file.filename is not None:
+            self.imported_modules.add(program_ast.file.filename)
 
         for statement in program_ast.statements:
-            self.generate_statement(main_builder, statement)
+            self.walk_statement(self.main_builder, statement)
 
-        main_builder.ret(PyTypeInt32.llvm_type(0))
+    def walk_statement(self, builder: ir.IRBuilder, statement: ast.StatementAST):
+        match statement:
+            case ast.ImportStatementAST():
+                self.walk_import_statement(builder, statement)
+            case ast.PassStatementAST():
+                pass
+            case ast.ExpressionsStatementAST():
+                for expression in statement.expressions:
+                    self.walk_expression(builder, expression)
+            case ast.FunctionDefinitionStatementAST():
+                raise FeatureNotImplementedError(statement)
+            case ast.MultipleStatementAST():
+                for sub_statement in statement.statements:
+                    self.walk_statement(builder, sub_statement)
+            case _:
+                raise FeatureNotImplementedError(statement)
 
-    def generate_statement(self, builder: ir.IRBuilder, statements: ast.StatementAST):
-        if isinstance(statements, ast.PassStatementAST):
-            return
+    def walk_import_statement(
+        self,
+        builder: ir.IRBuilder,
+        statement: ast.ImportStatementAST,
+    ):
+        tried_paths = list[str]()
 
-        if isinstance(statements, ast.ExpressionsStatementAST):
-            for expression in statements.expressions:
-                self.generate_expression(builder, expression)
-            return
+        import_path = "/".join(statement.path)
+        for module_path in self.module_paths:
+            filepath = os.path.join(module_path, f"{import_path}.py")
 
-        if isinstance(statements, ast.BreakStatementAST):
-            raise NotImplementedError()
+            if os.path.exists(filepath):
+                program_ast = parse(filepath)
+                self.walk_program(program_ast)
+                return
 
-        if isinstance(statements, ast.ContinueStatementAST):
-            raise NotImplementedError()
+            tried_paths.append(filepath)
 
-        raise NotImplementedError(statements)
+        raise ModuleNotFoundError(statement, tried_paths)
 
-    def generate_expression(
+    def walk_expression(
         self,
         builder: ir.IRBuilder,
         expression: ast.ExpressionAST,
     ) -> ir.Value:
         if isinstance(expression, ast.CallExpressionAST):
-            left_expression = self.generate_expression(builder, expression.expression)
+            left_expression = self.walk_expression(builder, expression.expression)
             arguments = [
-                self.generate_expression(builder, argument.expression)
+                self.walk_expression(builder, argument.expression)
                 for argument in expression.arguments
             ]
 
@@ -202,4 +254,4 @@ class IntermediateRepresentation:
 
                     return global_string
 
-        raise NotImplementedError(expression)
+        raise FeatureNotImplementedError(expression)

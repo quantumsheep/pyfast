@@ -1,4 +1,4 @@
-from parser.ast.ast import ProgramAST
+from parser.ast import ProgramAST
 
 from antlr4 import CommonTokenStream, FileStream
 
@@ -24,6 +24,5 @@ def parse(filename: str) -> ProgramAST:
 
     v = Visitor()
     program_ast = v.visitFile_input(tree)
-    program_ast.filename = filename
 
     return program_ast

@@ -5,6 +5,8 @@
 # type: ignore
 # type: ignore
 # type: ignore
+# type: ignore
+# type: ignore
 
 from antlr4 import InputStream, Parser
 from typing import TextIO

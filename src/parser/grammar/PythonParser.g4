@@ -81,6 +81,70 @@
  *
  * 
  *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
+ * 
+ *
  */
 
 /*
@@ -268,6 +332,70 @@ kwds: '**' param_no_default;
 // There are two alternative forms of each, to deal with type comments: - Ends in a comma followed
 // by an optional type comment - No comma, optional type comment, must be followed by close paren
 // The latter form is for a final parameter without trailing comma.
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
 // 
 //
 // 
@@ -602,11 +730,11 @@ primary:
 	)
 	| atom;
 
-slices:
-	slice
-	| (slice | starred_expression) (
-		',' (slice | starred_expression)
-	)* ','?;
+slices: slice | chained_slices;
+
+chained_slices: chained_slice (',' chained_slice)* ','?;
+
+chained_slice: slice | starred_expression;
 
 slice:
 	expression? ':' expression? (':' expression?)?
@@ -635,6 +763,70 @@ lambda_params: lambda_parameters;
 // lambda_parameters etc. duplicates parameters but without annotations or type comments, and if
 // there's no comma after a parameter, we expect a colon, not a close parenthesis. (For more, see
 // parameters above.)
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
+// 
+//
 // 
 //
 // 

@@ -41,7 +41,32 @@ files = [
     {file = "llvmlite-0.43.0.tar.gz", hash = "sha256:ae2b5b5c3ef67354824fb75517c8db5fbe93bc02cd9671f3c62271626bc041d5"},
 ]
 
+[[package]]
+name = "six"
+version = "1.17.0"
+description = "Python 2 and 3 compatibility utilities"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
+files = [
+    {file = "six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"},
+    {file = "six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81"},
+]
+
+[[package]]
+name = "treelib"
+version = "1.7.0"
+description = "A Python implementation of tree structure."
+optional = false
+python-versions = "*"
+files = [
+    {file = "treelib-1.7.0-py3-none-any.whl", hash = "sha256:c37795eaba19f73f3e1a905ef3f4f0cab660dc7617126e8ae99391e25c755416"},
+    {file = "treelib-1.7.0.tar.gz", hash = "sha256:9bff1af416b9e642a6cd0e0431d15edf26a24b8d0c8ae68afbd3801b5e30fb61"},
+]
+
+[package.dependencies]
+six = "*"
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "57777436caa3936a53b704afc977d262eb7722dd477237b756eef1115c7fbf46"
+content-hash = "2c2288f1af0b1e7dac62b45c541d2214f007426e2293510dd8092dd4273e7c77"

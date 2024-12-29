@@ -1,12 +1,13 @@
-import ctypes
+# import ctypes
 
-libc = ctypes.CDLL("libc.dylib")
+# libc = ctypes.CDLL("libc.dylib")
 
 # https://github.com/opensource-apple/xnu/blob/master/bsd/kern/syscalls.master
 
 
 def syscall(num: int, *args) -> int:
-    return libc.syscall(num, *args)
+    # return libc.syscall(num, *args)
+    return 0
 
 
 def exit(rval: int) -> None:
