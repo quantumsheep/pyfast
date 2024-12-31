@@ -168,6 +168,8 @@ class Visitor:
                 self.walk_assignment_statement(builder, statement)
             case ast.IfStatementAST():
                 self.walk_if_statement(builder, statement)
+            case ast.WhileStatementAST():
+                self.walk_while_statement(builder, statement)
             case _:
                 raise FeatureNotImplementedError(statement)
 
@@ -315,6 +317,29 @@ class Visitor:
             next(if_else_generator, None)
         else:
             with if_then(builder, condition):
+                for sub_statement in statement.body:
+                    self.walk_statement(builder, sub_statement)
+
+    def walk_while_statement(
+        self,
+        builder: ir.IRBuilder,
+        statement: ast.WhileStatementAST,
+    ):
+        bb = cast(ir.Block, builder.block)
+
+        bbcond = builder.append_basic_block(name=bb.name + ".while.cond")
+        builder.branch(bbcond)
+
+        builder.position_at_end(bbcond)
+
+        condition = self.walk_expression(builder, statement.condition)
+        if isinstance(condition, ir.Type):
+            raise SourceError(statement, "cannot use type as condition")
+
+        if len(statement.else_body) > 0:
+            raise FeatureNotImplementedError(statement, "else block in while statement")
+        else:
+            with while_then(builder, condition):
                 for sub_statement in statement.body:
                     self.walk_statement(builder, sub_statement)
 
@@ -557,3 +582,33 @@ def if_else(builder: ir.IRBuilder, condition: ir.Value):
 
     # Move to the end block
     builder.position_at_end(bbendif)
+
+
+@contextmanager
+def while_then(builder: ir.IRBuilder, condition: ir.Value):
+    bbcond = cast(ir.Block, builder.block)
+
+    name_without_cond = bbcond.name.rsplit(".", 1)[0]
+
+    # Body block
+    bbbody = cast(ir.Block, builder.append_basic_block(name=name_without_cond + ".body"))
+    builder.position_at_end(bbbody)
+
+    yield
+
+    bbbody_end = cast(ir.Block, builder.block)
+
+    # End block
+    bbend = cast(ir.Block, builder.append_basic_block(name=name_without_cond + ".end"))
+
+    # Add br if the block does not have a terminator
+    builder.position_at_end(bbbody_end)
+    if cast(ir.Block, builder.block).terminator is None:
+        builder.branch(bbcond)
+
+    # Add cbranch to the end of the original block
+    builder.position_at_end(bbcond)
+    builder.cbranch(condition, bbbody, bbend)
+
+    # Move to the end block
+    builder.position_at_end(bbend)
