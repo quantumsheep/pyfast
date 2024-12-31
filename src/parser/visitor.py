@@ -233,9 +233,9 @@ class Visitor(ParseTreeVisitor):
             assignement_statement_ast = ast.AssignmentStatementAST(
                 source_position=get_source_position(ctx),
                 targets=[
-                    ast.NameTargetAST(
+                    ast.NameLiteralExpressionAST(
                         source_position=get_source_position(ctx),
-                        name=name.getText(),
+                        value=name.getText(),
                     )
                 ],
                 type=type_expression,
@@ -245,6 +245,7 @@ class Visitor(ParseTreeVisitor):
             if annotated_rhs := cast(
                 Union[PythonParser.Annotated_rhsContext, None], ctx.annotated_rhs()
             ):
+                assignement_statement_ast.operator = "="
                 assignement_statement_ast.values.append(
                     self.visitAnnotated_rhs(annotated_rhs),
                 )
@@ -256,10 +257,12 @@ class Visitor(ParseTreeVisitor):
         ):
             assignment_statement_ast = ast.AssignmentStatementAST(
                 source_position=get_source_position(ctx),
+                operator="=",
                 targets=[],
                 values=[],
             )
 
+            # TODO: This should support a = b = c = 1, not a, b, c = 1
             for star_targets_ctx in ctx.star_targets():
                 assignment_statement_ast.targets.extend(
                     self.visitStar_targets(star_targets_ctx)
@@ -783,11 +786,30 @@ class Visitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by PythonParser#elif_stmt.
     def visitElif_stmt(self, ctx: PythonParser.Elif_stmtContext):
-        raise FeatureNotImplementedError(ctx)
+        condition = self.visitNamed_expression(ctx.named_expression())
+        body = self.visitBlock(ctx.block())
+
+        if_statement_ast = ast.IfStatementAST(
+            source_position=get_source_position(ctx),
+            condition=condition,
+            body=body,
+        )
+
+        if elif_ctx := cast(
+            Union[PythonParser.Elif_stmtContext, None], ctx.elif_stmt()
+        ):
+            if_statement_ast.else_body = [self.visitElif_stmt(elif_ctx)]
+
+        if else_block_ctx := cast(
+            Union[PythonParser.Else_blockContext, None], ctx.else_block()
+        ):
+            if_statement_ast.else_body = self.visitElse_block(else_block_ctx)
+
+        return if_statement_ast
 
     # Visit a parse tree produced by PythonParser#else_block.
-    def visitElse_block(self, ctx: PythonParser.Else_blockContext):
-        raise FeatureNotImplementedError(ctx)
+    def visitElse_block(self, ctx: PythonParser.Else_blockContext) -> list[ast.StatementAST]:
+        return self.visitBlock(ctx.block())
 
     # Visit a parse tree produced by PythonParser#while_stmt.
     def visitWhile_stmt(self, ctx: PythonParser.While_stmtContext):
@@ -1080,11 +1102,7 @@ class Visitor(ParseTreeVisitor):
         if expression_ctx := cast(
             Union[PythonParser.ExpressionContext, None], ctx.expression()
         ):
-            return ast.UnaryExpressionAST(
-                source_position=get_source_position(ctx),
-                expression=self.visitExpression(expression_ctx),
-                operator="*",
-            )
+            return self.visitExpression(expression_ctx)
 
         raise FeatureNotImplementedError(ctx)
 
@@ -1622,7 +1640,11 @@ class Visitor(ParseTreeVisitor):
             Union[PythonParser.Starred_expressionContext, None],
             ctx.starred_expression(),
         ):
-            return self.visitStarred_expression(starred_expression_ctx)
+            expression = self.visitStarred_expression(starred_expression_ctx)
+            return ast.SliceAST(
+                source_position=get_source_position(ctx),
+                start=expression,
+            )
 
         raise FeatureNotImplementedError(ctx)
 
@@ -1959,7 +1981,10 @@ class Visitor(ParseTreeVisitor):
             Union[PythonParser.Starred_expressionContext, None],
             ctx.starred_expression(),
         ):
-            return self.visitStarred_expression(starred_expression_ctx)
+            return ast.CallExpressionArgumentAST(
+                source_position=get_source_position(ctx),
+                expression=self.visitStarred_expression(starred_expression_ctx),
+            )
 
         if assignment_expression_ctx := cast(
             Union[PythonParser.Assignment_expressionContext, None],
@@ -1982,7 +2007,9 @@ class Visitor(ParseTreeVisitor):
         raise FeatureNotImplementedError(ctx)
 
     # Visit a parse tree produced by PythonParser#starred_expression.
-    def visitStarred_expression(self, ctx: PythonParser.Starred_expressionContext):
+    def visitStarred_expression(
+        self, ctx: PythonParser.Starred_expressionContext
+    ) -> ast.ExpressionAST:
         expression_ast = self.visitExpression(ctx.expression())
 
         return ast.UnaryExpressionAST(

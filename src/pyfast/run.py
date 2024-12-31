@@ -10,12 +10,12 @@ from pyfast.command import Command
 
 def command() -> Command:
     command = Command(
-        name="build",
-        description="PyFast Python compiler",
+        name="run",
+        description="Run a Python script",
         func=run,
     )
 
-    command.add_positional(name="filename", help="Python file to compile")
+    command.add_positional(name="filename", help="Python script to run")
     command.add_flag(
         short="-v",
         long="--verbose",
@@ -59,9 +59,8 @@ def run(args: dict[str, Any]) -> None:
         if verbose:
             print(verified_module)
 
-        object_bytes = compiler.emit_object(verified_module)
-        with open("output.o", "wb") as f:
-            f.write(object_bytes)
+        return_value = compiler.run(verified_module)
+        sys.exit(return_value)
     except Exception as e:
         if verbose:
             raise e

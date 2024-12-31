@@ -2,30 +2,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from typing import cast
 from parser import ast
 from parser.driver import parse
 
 from llvmlite import ir
 
 
-class FeatureNotImplementedError(NotImplementedError):
-    def __init__(self, tree: ast.AST):
+class SourceError(Exception):
+    def __init__(self, tree: ast.AST, message: str):
+        super().__init__(tree.source_position.error(message))
+
+
+class FeatureNotImplementedError(SourceError):
+    def __init__(self, tree: ast.AST, feature: str | None = None):
         ast_type = type(tree).__name__
 
-        super().__init__(
-            tree.source_position.error(
-                f"feature not implemented in compiler ({ast_type})"
-            )
-        )
+        message = f"{feature} " if feature is not None else ""
+        message += f"feature not implemented in compiler ({ast_type})"
+
+        super().__init__(tree, message)
 
 
-class ModuleNotFoundError(Exception):
+class ModuleNotFoundError(SourceError):
     def __init__(self, tree: ast.AST, tried_paths: list[str]):
-        super().__init__(
-            tree.source_position.error(
-                "module not found. Tried: " + ", ".join(tried_paths)
-            )
-        )
+        super().__init__(tree, "module not found. Tried: " + ", ".join(tried_paths))
 
 
 @dataclass(kw_only=True)
@@ -99,12 +100,15 @@ class PyClass:
     properties: dict[str, PyClassProperty]
 
 
+IRValue = ir.Constant | ir.NamedValue
+
+
 class Scope:
     def __init__(self, parent: Scope | None = None):
         self.parent = parent
-        self.values = dict[str, ir.Value | ir.Type]()
+        self.values = dict[str, IRValue | ir.Type]()
 
-    def __getitem__(self, name: str) -> ir.Value | ir.Type | None:
+    def __getitem__(self, name: str) -> IRValue | ir.Type | None:
         if name in self.values:
             return self.values[name]
 
@@ -113,7 +117,7 @@ class Scope:
 
         return None
 
-    def __setitem__(self, name: str, value: ir.Value | ir.Type):
+    def __setitem__(self, name: str, value: IRValue | ir.Type):
         self.values[name] = value
 
 
@@ -128,14 +132,14 @@ class Visitor:
 
         self.module = ir.Module(name="main.py")
 
-        # Type: str
-        string_type = ir.IdentifiedStructType(self.module.context, name="libpy.str")
-        string_type.set_body(
-            PyTypeInt64.llvm_type,
-            PyTypeInt8.llvm_type.as_pointer(),
-        )
-        self.module.context.identified_types[string_type.name] = string_type
-        self.scope[string_type.name] = string_type
+        # # Type: str
+        # string_type = ir.IdentifiedStructType(self.module.context, name="libpy.str")
+        # string_type.set_body(
+        #     PyTypeInt64.llvm_type,
+        #     PyTypeInt8.llvm_type.as_pointer(),
+        # )
+        # self.module.context.identified_types[string_type.name] = string_type
+        # self.scope[string_type.name] = string_type
 
         # Main function
         main_function_type = ir.FunctionType(PyTypeInt32.llvm_type, ())
@@ -143,6 +147,9 @@ class Visitor:
 
         main_block = main_function.append_basic_block(name="entry")
         self.main_builder = ir.IRBuilder(main_block)
+
+    def finish(self):
+        self.main_builder.ret(PyTypeInt32.llvm_type(0))
 
     def walk_program(self, program_ast: ast.ProgramAST):
         if program_ast.file.filename is not None:
@@ -165,6 +172,10 @@ class Visitor:
             case ast.MultipleStatementAST():
                 for sub_statement in statement.statements:
                     self.walk_statement(builder, sub_statement)
+            case ast.AssignmentStatementAST():
+                self.walk_assignment_statement(builder, statement)
+            case ast.IfStatementAST():
+                self.walk_if_statement(builder, statement)
             case _:
                 raise FeatureNotImplementedError(statement)
 
@@ -188,70 +199,349 @@ class Visitor:
 
         raise ModuleNotFoundError(statement, tried_paths)
 
+    def walk_assignment_statement(
+        self,
+        builder: ir.IRBuilder,
+        statement: ast.AssignmentStatementAST,
+    ):
+        if len(statement.targets) < len(statement.values):
+            raise FeatureNotImplementedError(
+                statement, "assignment to more values than targets"
+            )
+
+        if len(statement.targets) > len(statement.values):
+            raise FeatureNotImplementedError(
+                statement, "assignment to less values than targets"
+            )
+
+        for target, value in zip(statement.targets, statement.values):
+            value_value = self.walk_expression(builder, value)
+            if isinstance(value_value, ir.Type):
+                raise FeatureNotImplementedError(
+                    value, "cannot assign type to variable"
+                )
+
+            target_value = self.walk_target(builder, target, value_value)
+
+            match statement.operator:
+                case "=":
+                    builder.store(value_value, target_value)
+                case (
+                    "+="
+                    | "-="
+                    | "*="
+                    | "/="
+                    | "%="
+                    | "&="
+                    | "|="
+                    | "^="
+                    | "<<="
+                    | ">>="
+                    | "**="
+                    | "//="
+                ):
+                    left = builder.load(target_value)
+                    right = value_value
+
+                    if left.type != right.type:
+                        raise SourceError(statement, "cannot add different types")
+
+                    match statement.operator:
+                        case "+=":
+                            result = builder.add(left, right)
+                        case "-=":
+                            result = builder.sub(left, right)
+                        case "*=":
+                            result = builder.mul(left, right)
+                        case "/=":
+                            result = builder.udiv(left, right)
+                        case "%=":
+                            result = builder.urem(left, right)
+                        case "&=":
+                            result = builder.and_(left, right)
+                        case "|=":
+                            result = builder.or_(left, right)
+                        case "^=":
+                            result = builder.xor(left, right)
+                        case "<<=":
+                            result = builder.shl(left, right)
+                        case ">>=":
+                            result = builder.ashr(left, right)
+                        case _:
+                            raise FeatureNotImplementedError(
+                                statement, f"operator {statement.operator}"
+                            )
+
+                    builder.store(result, target_value)
+                case _:
+                    raise FeatureNotImplementedError(
+                        statement, f"operator {statement.operator}"
+                    )
+
+    def walk_target(
+        self,
+        builder: ir.IRBuilder,
+        target: ast.TargetAST,
+        value: IRValue,
+    ) -> IRValue:
+        match target:
+            case ast.NameLiteralExpressionAST():
+                scope_item = self.scope[target.value]
+                if scope_item is None or isinstance(scope_item, ir.Type):
+                    alloca = builder.alloca(value.type, name=target.value)
+                    self.scope[target.value] = alloca
+
+                    return alloca
+                else:
+                    return scope_item
+            case _:
+                raise FeatureNotImplementedError(target)
+
+    def walk_if_statement(
+        self,
+        builder: ir.IRBuilder,
+        statement: ast.IfStatementAST,
+    ):
+        condition = self.walk_expression(builder, statement.condition)
+        if isinstance(condition, ir.Type):
+            raise SourceError(statement, "cannot use type as condition")
+
+        bb = cast(ir.Block, builder.block)
+
+        if len(statement.else_body) > 0:
+            ir.Block(builder.function, name=bb.name + ".if")
+
+            # If block
+            bbif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if"))
+            builder.position_at_end(bbif)
+
+            for sub_statement in statement.body:
+                self.walk_statement(builder, sub_statement)
+            bbif_end = cast(ir.Block, builder.block)
+
+            # Else block
+            bbelse = cast(ir.Block, builder.append_basic_block(name=bb.name + ".else"))
+            builder.position_at_end(bbelse)
+
+            for sub_statement in statement.else_body:
+                self.walk_statement(builder, sub_statement)
+            bbelse_end = cast(ir.Block, builder.block)
+
+            # End if block
+            bbendif = cast(
+                ir.Block, builder.append_basic_block(name=bb.name + ".endif")
+            )
+
+            # Add br if the blocks does not have a terminator
+            builder.position_at_end(bbif_end)
+            if cast(ir.Block, builder.block).terminator is None:
+                builder.branch(bbendif)
+
+            builder.position_at_end(bbelse_end)
+            if cast(ir.Block, builder.block).terminator is None:
+                builder.branch(bbendif)
+
+            # Add cbranch to the end of the original block
+            builder.position_at_end(bb)
+            builder.cbranch(condition, bbif, bbelse)
+
+            # Move to the end block
+            builder.position_at_end(bbendif)
+        else:
+            # If block
+            bbif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if"))
+            builder.position_at_end(bbif)
+
+            for sub_statement in statement.body:
+                self.walk_statement(builder, sub_statement)
+            bbif_end = cast(ir.Block, builder.block)
+
+            # End if block
+            bbendif = cast(
+                ir.Block, builder.append_basic_block(name=bb.name + ".endif")
+            )
+
+            # Add br if the block does not have a terminator
+            builder.position_at_end(bbif_end)
+            if cast(ir.Block, builder.block).terminator is None:
+                builder.branch(bbendif)
+
+            # Add cbranch to the end of the original block
+            builder.position_at_end(bb)
+            builder.cbranch(condition, bbif, bbendif)
+
+            # Move to the end block
+            builder.position_at_end(bbendif)
+
     def walk_expression(
         self,
         builder: ir.IRBuilder,
         expression: ast.ExpressionAST,
-    ) -> ir.Value:
-        if isinstance(expression, ast.CallExpressionAST):
-            left_expression = self.walk_expression(builder, expression.expression)
-            arguments = [
-                self.walk_expression(builder, argument.expression)
-                for argument in expression.arguments
-            ]
+    ) -> IRValue | ir.Type:
+        match expression:
+            case ast.NumberLiteralExpressionAST():
+                return self.walk_number_literal_expression(builder, expression)
+            case ast.NameLiteralExpressionAST():
+                return self.walk_name_literal_expression(builder, expression)
+            case ast.CallExpressionAST():
+                return self.walk_call_expression(builder, expression)
+            case ast.UnaryExpressionAST():
+                return self.walk_unary_expression(builder, expression)
+            case ast.BinaryExpressionAST():
+                return self.walk_binary_expression(builder, expression)
+            case _:
+                raise FeatureNotImplementedError(expression)
 
-            return builder.call(left_expression, arguments)
+    def walk_number_literal_expression(
+        self,
+        builder: ir.IRBuilder,
+        expression: ast.NumberLiteralExpressionAST,
+    ) -> IRValue:
+        match expression.value:
+            case int():
+                return PyTypeInt32.llvm_type(expression.value)
+            case float():
+                return PyTypeFloat64.llvm_type(expression.value)
+            case _:
+                raise SourceError(expression, "undefined identifier")
 
-        if isinstance(expression, ast.NameLiteralExpressionAST):
-            value = self.scope[expression.value]
-            if value is None:
-                raise ValueError(f"Undefined variable {expression.value}")
+    def walk_name_literal_expression(
+        self,
+        builder: ir.IRBuilder,
+        expression: ast.NameLiteralExpressionAST,
+    ) -> IRValue | ir.Type:
+        value = self.scope[expression.value]
+        if value is None:
+            raise SourceError(expression, f"undefined identifier {expression.value}")
 
-            if not isinstance(value, ir.Value):
-                raise ValueError(f"Can't use type {value} as a value")
+        return value
 
-            return value
+    def walk_call_expression(
+        self,
+        builder: ir.IRBuilder,
+        expression: ast.CallExpressionAST,
+    ) -> IRValue | ir.Type:
+        left_expression = self.walk_expression(builder, expression.expression)
+        arguments = [
+            self.walk_expression(builder, argument.expression)
+            for argument in expression.arguments
+        ]
 
-        if isinstance(expression, ast.CombinatoryStringLiteralExpressionAST):
-            for value in expression.values:
-                if isinstance(value, ast.StringLiteralExpressionAST):
-                    global_raw_string_type = ir.ArrayType(
-                        PyTypeInt8.llvm_type,
-                        len(value.value) + 1,
-                    )
-                    global_raw_string = ir.GlobalVariable(
-                        module=self.module,
-                        typ=global_raw_string_type,
-                        name="str",
-                    )
-                    global_raw_string.linkage = "private"
-                    global_raw_string.global_constant = True
-                    global_raw_string.unnamed_addr = True
-                    global_raw_string.align = 1  # type: ignore
-                    global_raw_string.initializer = ir.Constant(  # type: ignore
-                        typ=global_raw_string_type,
-                        constant=bytearray(value.value.encode("utf-8")),
-                    )
+        return builder.call(left_expression, arguments)
 
-                    global_string_type = self.scope["libpy.str"]
-                    global_string = ir.GlobalVariable(
-                        module=self.module,
-                        typ=global_string_type,
-                        name="str.2",
-                    )
-                    global_string.linkage = "private"
-                    global_string.global_constant = True
-                    global_string.unnamed_addr = True
-                    global_string.initializer = ir.Constant(  # type: ignore
-                        global_string_type,
-                        [
-                            PyTypeInt64.llvm_type(len(value.value)),
-                            global_raw_string.gep(
-                                [PyTypeInt32.llvm_type(0), PyTypeInt32.llvm_type(0)]
-                            ),
-                        ],
-                    )
+    def walk_unary_expression(
+        self,
+        builder: ir.IRBuilder,
+        expression: ast.UnaryExpressionAST,
+    ) -> IRValue | ir.Type:
+        value = self.walk_expression(builder, expression.expression)
 
-                    return global_string
+        match expression.operator:
+            case _:
+                raise FeatureNotImplementedError(
+                    expression, f"operator {expression.operator}"
+                )
 
-        raise FeatureNotImplementedError(expression)
+    def walk_binary_expression(
+        self,
+        builder: ir.IRBuilder,
+        expression: ast.BinaryExpressionAST,
+    ) -> IRValue | ir.Type:
+        left = self.walk_expression(builder, expression.left)
+        if isinstance(left, ir.Type):
+            raise SourceError(expression, "cannot use type as left operand")
+
+        right = self.walk_expression(builder, expression.right)
+        if isinstance(right, ir.Type):
+            raise SourceError(expression, "cannot use type as right operand")
+
+        if isinstance(left, ir.AllocaInstr):
+            left = builder.load(left)
+
+        if isinstance(right, ir.AllocaInstr):
+            right = builder.load(right)
+
+        if left.type != right.type:
+            raise SourceError(expression, "cannot add different types")
+
+        match expression.operator:
+            case "+":
+                return cast(ir.NamedValue, builder.add(left, right))
+            case "-":
+                return cast(ir.NamedValue, builder.sub(left, right))
+            case "*":
+                return cast(ir.NamedValue, builder.mul(left, right))
+            case "/":
+                return cast(ir.NamedValue, builder.udiv(left, right))
+            case "%":
+                return cast(ir.NamedValue, builder.urem(left, right))
+            case "&":
+                return cast(ir.NamedValue, builder.and_(left, right))
+            case "|":
+                return cast(ir.NamedValue, builder.or_(left, right))
+            case "^":
+                return cast(ir.NamedValue, builder.xor(left, right))
+            case "<<":
+                return cast(ir.NamedValue, builder.shl(left, right))
+            case ">>":
+                return cast(ir.NamedValue, builder.ashr(left, right))
+            case "==":
+                return cast(ir.NamedValue, builder.icmp_signed("==", left, right))
+            case "!=":
+                return cast(ir.NamedValue, builder.icmp_signed("!=", left, right))
+            case "<=":
+                return cast(ir.NamedValue, builder.icmp_signed("<=", left, right))
+            case "<":
+                return cast(ir.NamedValue, builder.icmp_signed("<", left, right))
+            case ">=":
+                return cast(ir.NamedValue, builder.icmp_signed(">=", left, right))
+            case ">":
+                return cast(ir.NamedValue, builder.icmp_signed(">", left, right))
+            case _:
+                raise FeatureNotImplementedError(
+                    expression, f"operator {expression.operator}"
+                )
+
+    # if isinstance(expression, ast.CombinatoryStringLiteralExpressionAST):
+    #     for value in expression.values:
+    #         if isinstance(value, ast.StringLiteralExpressionAST):
+    #             global_raw_string_type = ir.ArrayType(
+    #                 PyTypeInt8.llvm_type,
+    #                 len(value.value) + 1,
+    #             )
+    #             global_raw_string = ir.GlobalVariable(
+    #                 module=self.module,
+    #                 typ=global_raw_string_type,
+    #                 name="str",
+    #             )
+    #             global_raw_string.linkage = "private"
+    #             global_raw_string.global_constant = True
+    #             global_raw_string.unnamed_addr = True
+    #             global_raw_string.align = 1  # type: ignore
+    #             global_raw_string.initializer = ir.Constant(  # type: ignore
+    #                 typ=global_raw_string_type,
+    #                 constant=bytearray(value.value.encode("utf-8")),
+    #             )
+
+    #             global_string_type = self.scope["libpy.str"]
+    #             global_string = ir.GlobalVariable(
+    #                 module=self.module,
+    #                 typ=global_string_type,
+    #                 name="str.2",
+    #             )
+    #             global_string.linkage = "private"
+    #             global_string.global_constant = True
+    #             global_string.unnamed_addr = True
+    #             global_string.initializer = ir.Constant(  # type: ignore
+    #                 global_string_type,
+    #                 [
+    #                     PyTypeInt64.llvm_type(len(value.value)),
+    #                     global_raw_string.gep(
+    #                         [PyTypeInt32.llvm_type(0), PyTypeInt32.llvm_type(0)]
+    #                     ),
+    #                 ],
+    #             )
+
+    #             return global_string
+
+    # raise FeatureNotImplementedError(expression)
