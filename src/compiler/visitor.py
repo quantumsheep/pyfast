@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import os
 from typing import cast
@@ -131,15 +132,6 @@ class Visitor:
         self.imported_modules = set[str]()
 
         self.module = ir.Module(name="main.py")
-
-        # # Type: str
-        # string_type = ir.IdentifiedStructType(self.module.context, name="libpy.str")
-        # string_type.set_body(
-        #     PyTypeInt64.llvm_type,
-        #     PyTypeInt8.llvm_type.as_pointer(),
-        # )
-        # self.module.context.identified_types[string_type.name] = string_type
-        # self.scope[string_type.name] = string_type
 
         # Main function
         main_function_type = ir.FunctionType(PyTypeInt32.llvm_type, ())
@@ -306,72 +298,25 @@ class Visitor:
         if isinstance(condition, ir.Type):
             raise SourceError(statement, "cannot use type as condition")
 
-        bb = cast(ir.Block, builder.block)
-
         if len(statement.else_body) > 0:
-            ir.Block(builder.function, name=bb.name + ".if")
+            if_else_generator = if_else(builder, condition)
 
             # If block
-            bbif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if"))
-            builder.position_at_end(bbif)
-
+            next(if_else_generator)
             for sub_statement in statement.body:
                 self.walk_statement(builder, sub_statement)
-            bbif_end = cast(ir.Block, builder.block)
 
             # Else block
-            bbelse = cast(ir.Block, builder.append_basic_block(name=bb.name + ".else"))
-            builder.position_at_end(bbelse)
-
+            next(if_else_generator)
             for sub_statement in statement.else_body:
                 self.walk_statement(builder, sub_statement)
-            bbelse_end = cast(ir.Block, builder.block)
 
             # End if block
-            bbendif = cast(
-                ir.Block, builder.append_basic_block(name=bb.name + ".endif")
-            )
-
-            # Add br if the blocks does not have a terminator
-            builder.position_at_end(bbif_end)
-            if cast(ir.Block, builder.block).terminator is None:
-                builder.branch(bbendif)
-
-            builder.position_at_end(bbelse_end)
-            if cast(ir.Block, builder.block).terminator is None:
-                builder.branch(bbendif)
-
-            # Add cbranch to the end of the original block
-            builder.position_at_end(bb)
-            builder.cbranch(condition, bbif, bbelse)
-
-            # Move to the end block
-            builder.position_at_end(bbendif)
+            next(if_else_generator, None)
         else:
-            # If block
-            bbif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if"))
-            builder.position_at_end(bbif)
-
-            for sub_statement in statement.body:
-                self.walk_statement(builder, sub_statement)
-            bbif_end = cast(ir.Block, builder.block)
-
-            # End if block
-            bbendif = cast(
-                ir.Block, builder.append_basic_block(name=bb.name + ".endif")
-            )
-
-            # Add br if the block does not have a terminator
-            builder.position_at_end(bbif_end)
-            if cast(ir.Block, builder.block).terminator is None:
-                builder.branch(bbendif)
-
-            # Add cbranch to the end of the original block
-            builder.position_at_end(bb)
-            builder.cbranch(condition, bbif, bbendif)
-
-            # Move to the end block
-            builder.position_at_end(bbendif)
+            with if_then(builder, condition):
+                for sub_statement in statement.body:
+                    self.walk_statement(builder, sub_statement)
 
     def walk_expression(
         self,
@@ -545,3 +490,70 @@ class Visitor:
     #             return global_string
 
     # raise FeatureNotImplementedError(expression)
+
+
+@contextmanager
+def if_then(builder: ir.IRBuilder, condition: ir.Value):
+    bb = cast(ir.Block, builder.block)
+
+    # If block
+    bbif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if.true"))
+    builder.position_at_end(bbif)
+
+    yield
+
+    bbif_end = cast(ir.Block, builder.block)
+
+    # End if block
+    bbendif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if.end"))
+
+    # Add br if the block does not have a terminator
+    builder.position_at_end(bbif_end)
+    if cast(ir.Block, builder.block).terminator is None:
+        builder.branch(bbendif)
+
+    # Add cbranch to the end of the original block
+    builder.position_at_end(bb)
+    builder.cbranch(condition, bbif, bbendif)
+
+    # Move to the end block
+    builder.position_at_end(bbendif)
+
+
+def if_else(builder: ir.IRBuilder, condition: ir.Value):
+    bb = cast(ir.Block, builder.block)
+
+    # If block
+    bbif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if.true"))
+    builder.position_at_end(bbif)
+
+    yield
+
+    bbif_end = cast(ir.Block, builder.block)
+
+    # Else block
+    bbelse = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if.false"))
+    builder.position_at_end(bbelse)
+
+    yield
+
+    bbelse_end = cast(ir.Block, builder.block)
+
+    # End if block
+    bbendif = cast(ir.Block, builder.append_basic_block(name=bb.name + ".if.end"))
+
+    # Add br if the blocks does not have a terminator
+    builder.position_at_end(bbif_end)
+    if cast(ir.Block, builder.block).terminator is None:
+        builder.branch(bbendif)
+
+    builder.position_at_end(bbelse_end)
+    if cast(ir.Block, builder.block).terminator is None:
+        builder.branch(bbendif)
+
+    # Add cbranch to the end of the original block
+    builder.position_at_end(bb)
+    builder.cbranch(condition, bbif, bbelse)
+
+    # Move to the end block
+    builder.position_at_end(bbendif)
