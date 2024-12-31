@@ -14,7 +14,7 @@ class SourcePosition:
     line: int
     column: int
 
-    def error(self, message: str):
+    def error(self, message: str, title: str = "Error"):
         relative_filename_path = (
             os.path.relpath(self.file.filename, os.getcwd())
             if self.file.filename
@@ -42,7 +42,7 @@ class SourcePosition:
             lines.pop(-1)
 
         issue_lines = "\n".join(lines)
-        return f"\033[1m\033[31mError\033[0m\033[1m: {message}\033[0m\n --> {position}:\n\n{issue_lines}\n"
+        return f"\033[1m\033[31m{title}\033[0m\033[1m: {message}\033[0m\n --> {position}:\n\n{issue_lines}\n"
 
 
 @dataclass(kw_only=True)

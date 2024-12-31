@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 from typing import cast
 from parser import ast
 from parser.driver import parse
 
 from llvmlite import ir
+
+
+class CompilerError(Exception):
+    def __init__(self, tree: ast.AST, message: str):
+        super().__init__(
+            tree.source_position.error(
+                f"{message}. This is not your fault, but a bug in the compiler.",
+                title="Compiler Error",
+            )
+        )
 
 
 class SourceError(Exception):
@@ -104,10 +114,17 @@ class PyClass:
 IRValue = ir.Constant | ir.NamedValue
 
 
+@dataclass(kw_only=True)
 class Scope:
-    def __init__(self, parent: Scope | None = None):
-        self.parent = parent
-        self.values = dict[str, IRValue | ir.Type]()
+    parent: Scope | None = None
+
+    is_function: bool = False
+    is_loop: bool = False
+
+    values: dict[str, IRValue | ir.Type] = field(default_factory=dict, init=False)
+
+    loop_cond_block: ir.Block | None = None
+    loop_end_block: ir.Block | None = None
 
     def __getitem__(self, name: str) -> IRValue | ir.Type | None:
         if name in self.values:
@@ -121,11 +138,36 @@ class Scope:
     def __setitem__(self, name: str, value: IRValue | ir.Type):
         self.values[name] = value
 
+    def __contains__(self, name: str) -> bool:
+        if name in self.values:
+            return True
+
+        if self.parent is not None:
+            return name in self.parent
+
+        return False
+
+    def for_variables(self) -> Scope:
+        if self.is_function:
+            return self
+
+        if self.parent is not None:
+            return self.parent.for_variables()
+
+        return self
+
+    def current_loop(self) -> Scope | None:
+        if self.is_loop:
+            return self
+
+        if self.parent is not None:
+            return self.parent.current_loop()
+
+        return None
+
 
 class Visitor:
     def __init__(self):
-        self.scope = Scope()
-
         env_pyfast_module_paths = os.environ.get("PYFAST_MODULE_PATH", "").split(":")
 
         self.module_paths = set(env_pyfast_module_paths)
@@ -144,13 +186,23 @@ class Visitor:
         self.main_builder.ret(PyTypeInt32.llvm_type(0))
 
     def walk_program(self, program_ast: ast.ProgramAST):
+        scope = Scope()
+
         if program_ast.file.filename is not None:
             self.imported_modules.add(program_ast.file.filename)
 
         for statement in program_ast.statements:
-            self.walk_statement(self.main_builder, statement)
+            self.walk_statement(scope, self.main_builder, statement)
 
-    def walk_statement(self, builder: ir.IRBuilder, statement: ast.StatementAST):
+    def walk_statement(
+        self,
+        scope: Scope,
+        builder: ir.IRBuilder,
+        statement: ast.StatementAST,
+    ):
+        if cast(ir.Block, builder.block).terminator is not None:
+            return
+
         match statement:
             case ast.ImportStatementAST():
                 self.walk_import_statement(builder, statement)
@@ -158,18 +210,22 @@ class Visitor:
                 pass
             case ast.ExpressionsStatementAST():
                 for expression in statement.expressions:
-                    self.walk_expression(builder, expression)
+                    self.walk_expression(scope, builder, expression)
             case ast.FunctionDefinitionStatementAST():
                 raise FeatureNotImplementedError(statement)
             case ast.MultipleStatementAST():
                 for sub_statement in statement.statements:
-                    self.walk_statement(builder, sub_statement)
+                    self.walk_statement(scope, builder, sub_statement)
             case ast.AssignmentStatementAST():
-                self.walk_assignment_statement(builder, statement)
+                self.walk_assignment_statement(scope, builder, statement)
             case ast.IfStatementAST():
-                self.walk_if_statement(builder, statement)
+                self.walk_if_statement(scope, builder, statement)
             case ast.WhileStatementAST():
-                self.walk_while_statement(builder, statement)
+                self.walk_while_statement(scope, builder, statement)
+            case ast.BreakStatementAST():
+                self.walk_break_statement(scope, builder, statement)
+            case ast.ContinueStatementAST():
+                self.walk_continue_statement(scope, builder, statement)
             case _:
                 raise FeatureNotImplementedError(statement)
 
@@ -195,6 +251,7 @@ class Visitor:
 
     def walk_assignment_statement(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         statement: ast.AssignmentStatementAST,
     ):
@@ -209,13 +266,13 @@ class Visitor:
             )
 
         for target, value in zip(statement.targets, statement.values):
-            value_value = self.walk_expression(builder, value)
+            value_value = self.walk_expression(scope, builder, value)
             if isinstance(value_value, ir.Type):
                 raise FeatureNotImplementedError(
                     value, "cannot assign type to variable"
                 )
 
-            target_value = self.walk_target(builder, target, value_value)
+            target_value = self.walk_target(scope, builder, target, value_value)
 
             match statement.operator:
                 case "=":
@@ -274,29 +331,32 @@ class Visitor:
 
     def walk_target(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         target: ast.TargetAST,
         value: IRValue,
     ) -> IRValue:
         match target:
             case ast.NameLiteralExpressionAST():
-                scope_item = self.scope[target.value]
+                scope_item = scope[target.value]
+
                 if scope_item is None or isinstance(scope_item, ir.Type):
                     alloca = builder.alloca(value.type, name=target.value)
-                    self.scope[target.value] = alloca
+                    scope.for_variables()[target.value] = alloca
 
                     return alloca
-                else:
-                    return scope_item
+
+                return scope_item
             case _:
                 raise FeatureNotImplementedError(target)
 
     def walk_if_statement(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         statement: ast.IfStatementAST,
     ):
-        condition = self.walk_expression(builder, statement.condition)
+        condition = self.walk_expression(scope, builder, statement.condition)
         if isinstance(condition, ir.Type):
             raise SourceError(statement, "cannot use type as condition")
 
@@ -306,22 +366,23 @@ class Visitor:
             # If block
             next(if_else_generator)
             for sub_statement in statement.body:
-                self.walk_statement(builder, sub_statement)
+                self.walk_statement(scope, builder, sub_statement)
 
             # Else block
             next(if_else_generator)
             for sub_statement in statement.else_body:
-                self.walk_statement(builder, sub_statement)
+                self.walk_statement(scope, builder, sub_statement)
 
             # End if block
             next(if_else_generator, None)
         else:
             with if_then(builder, condition):
                 for sub_statement in statement.body:
-                    self.walk_statement(builder, sub_statement)
+                    self.walk_statement(scope, builder, sub_statement)
 
     def walk_while_statement(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         statement: ast.WhileStatementAST,
     ):
@@ -332,38 +393,77 @@ class Visitor:
 
         builder.position_at_end(bbcond)
 
-        condition = self.walk_expression(builder, statement.condition)
+        condition = self.walk_expression(scope, builder, statement.condition)
         if isinstance(condition, ir.Type):
             raise SourceError(statement, "cannot use type as condition")
 
         if len(statement.else_body) > 0:
-            raise FeatureNotImplementedError(statement, "else block in while statement")
+            while_else_generator = while_else(scope, builder, condition)
+
+            # While block
+            while_scope = next(while_else_generator)
+            for sub_statement in statement.body:
+                self.walk_statement(while_scope, builder, sub_statement)
+
+            # Else block
+            else_scope = next(while_else_generator)
+            for sub_statement in statement.else_body:
+                self.walk_statement(else_scope, builder, sub_statement)
+
+            # End if block
+            next(while_else_generator, None)
         else:
-            with while_then(builder, condition):
+            with while_then(scope, builder, condition) as while_scope:
                 for sub_statement in statement.body:
-                    self.walk_statement(builder, sub_statement)
+                    self.walk_statement(while_scope, builder, sub_statement)
+
+    def walk_break_statement(
+        self,
+        scope: Scope,
+        builder: ir.IRBuilder,
+        statement: ast.BreakStatementAST,
+    ):
+        loop = scope.current_loop()
+        if loop is None:
+            raise SourceError(statement, "break statement outside loop")
+
+        builder.branch(loop.loop_end_block)
+
+    def walk_continue_statement(
+        self,
+        scope: Scope,
+        builder: ir.IRBuilder,
+        statement: ast.ContinueStatementAST,
+    ):
+        loop = scope.current_loop()
+        if loop is None:
+            raise SourceError(statement, "continue statement outside loop")
+
+        builder.branch(loop.loop_cond_block)
 
     def walk_expression(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         expression: ast.ExpressionAST,
     ) -> IRValue | ir.Type:
         match expression:
             case ast.NumberLiteralExpressionAST():
-                return self.walk_number_literal_expression(builder, expression)
+                return self.walk_number_literal_expression(scope, builder, expression)
             case ast.NameLiteralExpressionAST():
-                return self.walk_name_literal_expression(builder, expression)
+                return self.walk_name_literal_expression(scope, builder, expression)
             case ast.CallExpressionAST():
-                return self.walk_call_expression(builder, expression)
+                return self.walk_call_expression(scope, builder, expression)
             case ast.UnaryExpressionAST():
-                return self.walk_unary_expression(builder, expression)
+                return self.walk_unary_expression(scope, builder, expression)
             case ast.BinaryExpressionAST():
-                return self.walk_binary_expression(builder, expression)
+                return self.walk_binary_expression(scope, builder, expression)
             case _:
                 raise FeatureNotImplementedError(expression)
 
     def walk_number_literal_expression(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         expression: ast.NumberLiteralExpressionAST,
     ) -> IRValue:
@@ -377,10 +477,11 @@ class Visitor:
 
     def walk_name_literal_expression(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         expression: ast.NameLiteralExpressionAST,
     ) -> IRValue | ir.Type:
-        value = self.scope[expression.value]
+        value = scope.for_variables()[expression.value]
         if value is None:
             raise SourceError(expression, f"undefined identifier {expression.value}")
 
@@ -388,12 +489,13 @@ class Visitor:
 
     def walk_call_expression(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         expression: ast.CallExpressionAST,
     ) -> IRValue | ir.Type:
-        left_expression = self.walk_expression(builder, expression.expression)
+        left_expression = self.walk_expression(scope, builder, expression.expression)
         arguments = [
-            self.walk_expression(builder, argument.expression)
+            self.walk_expression(scope, builder, argument.expression)
             for argument in expression.arguments
         ]
 
@@ -401,10 +503,11 @@ class Visitor:
 
     def walk_unary_expression(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         expression: ast.UnaryExpressionAST,
     ) -> IRValue | ir.Type:
-        value = self.walk_expression(builder, expression.expression)
+        value = self.walk_expression(scope, builder, expression.expression)
 
         match expression.operator:
             case _:
@@ -414,14 +517,15 @@ class Visitor:
 
     def walk_binary_expression(
         self,
+        scope: Scope,
         builder: ir.IRBuilder,
         expression: ast.BinaryExpressionAST,
     ) -> IRValue | ir.Type:
-        left = self.walk_expression(builder, expression.left)
+        left = self.walk_expression(scope, builder, expression.left)
         if isinstance(left, ir.Type):
             raise SourceError(expression, "cannot use type as left operand")
 
-        right = self.walk_expression(builder, expression.right)
+        right = self.walk_expression(scope, builder, expression.right)
         if isinstance(right, ir.Type):
             raise SourceError(expression, "cannot use type as right operand")
 
@@ -585,21 +689,36 @@ def if_else(builder: ir.IRBuilder, condition: ir.Value):
 
 
 @contextmanager
-def while_then(builder: ir.IRBuilder, condition: ir.Value):
+def while_then(
+    scope: Scope,
+    builder: ir.IRBuilder,
+    condition: ir.Value,
+):
     bbcond = cast(ir.Block, builder.block)
-
     name_without_cond = bbcond.name.rsplit(".", 1)[0]
 
+    bbend = ir.Block(parent=bbcond.function, name=name_without_cond + ".end")
+
+    scope = Scope(
+        parent=scope,
+        is_loop=True,
+        loop_cond_block=bbcond,
+        loop_end_block=bbend,
+    )
+
     # Body block
-    bbbody = cast(ir.Block, builder.append_basic_block(name=name_without_cond + ".body"))
+    bbbody = cast(
+        ir.Block, builder.append_basic_block(name=name_without_cond + ".body")
+    )
     builder.position_at_end(bbbody)
 
-    yield
+    yield scope
 
     bbbody_end = cast(ir.Block, builder.block)
 
     # End block
-    bbend = cast(ir.Block, builder.append_basic_block(name=name_without_cond + ".end"))
+    function = cast(ir.Function, builder.function)
+    function.blocks.append(bbend)
 
     # Add br if the block does not have a terminator
     builder.position_at_end(bbbody_end)
@@ -609,6 +728,65 @@ def while_then(builder: ir.IRBuilder, condition: ir.Value):
     # Add cbranch to the end of the original block
     builder.position_at_end(bbcond)
     builder.cbranch(condition, bbbody, bbend)
+
+    # Move to the end block
+    builder.position_at_end(bbend)
+
+
+def while_else(
+    scope: Scope,
+    builder: ir.IRBuilder,
+    condition: ir.Value,
+):
+    bbcond = cast(ir.Block, builder.block)
+    name_without_cond = bbcond.name.rsplit(".", 1)[0]
+
+    bbend = ir.Block(parent=bbcond.function, name=name_without_cond + ".end")
+
+    scope = Scope(
+        parent=scope,
+        is_loop=True,
+        loop_cond_block=bbcond,
+        loop_end_block=bbend,
+    )
+
+    # Body block
+    bbbody = cast(
+        ir.Block, builder.append_basic_block(name=name_without_cond + ".body")
+    )
+    builder.position_at_end(bbbody)
+
+    yield scope
+
+    bbbody_end = cast(ir.Block, builder.block)
+
+    # Else block
+    bbelse = cast(
+        ir.Block, builder.append_basic_block(name=name_without_cond + ".else")
+    )
+    builder.position_at_end(bbelse)
+
+    scope = cast(Scope, scope)
+    yield scope
+
+    bbelse_end = cast(ir.Block, builder.block)
+
+    # End block
+    function = cast(ir.Function, builder.function)
+    function.blocks.append(bbend)
+
+    # Add br if the block does not have a terminator
+    builder.position_at_end(bbbody_end)
+    if cast(ir.Block, builder.block).terminator is None:
+        builder.branch(bbcond)
+
+    builder.position_at_end(bbelse_end)
+    if cast(ir.Block, builder.block).terminator is None:
+        builder.branch(bbend)
+
+    # Add cbranch to the end of the original block
+    builder.position_at_end(bbcond)
+    builder.cbranch(condition, bbbody, bbelse_end)
 
     # Move to the end block
     builder.position_at_end(bbend)
