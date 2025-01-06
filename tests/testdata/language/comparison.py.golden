@@ -1,4 +1,6 @@
 Code with transformations:
+if 1 == 1:
+    pass
 x = 1 == 1
 if 1 == 1:
     pass
@@ -12,6 +14,10 @@ if 1 <= 1:
     pass
 if 1 >= 1:
     pass
+if x is x:
+    pass
+if x is not x:
+    pass
 
 --------------------------------------------------------------------------------
 AST:
@@ -20,7 +26,18 @@ program
 │   └── filename: "tests/testdata/language/comparison.py"
 └── statements: MultipleStatementAST
     └── statements
-        ├── 0: AssignmentStatementAST
+        ├── 0: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "=="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 1: AssignmentStatementAST
         │   ├── targets
         │   │   └── 0: NameLiteralExpressionAST
         │   │       └── value: "x"
@@ -33,7 +50,7 @@ program
         │           ├── operator: "=="
         │           └── right: NumberLiteralExpressionAST
         │               └── value: 1
-        ├── 1: IfStatementAST
+        ├── 2: IfStatementAST
         │   ├── condition: BinaryExpressionAST
         │   │   ├── left: NumberLiteralExpressionAST
         │   │   │   └── value: 1
@@ -44,7 +61,7 @@ program
         │   │   └── statements
         │   │       └── 0: PassStatementAST
         │   └── else_body: None
-        ├── 2: IfStatementAST
+        ├── 3: IfStatementAST
         │   ├── condition: BinaryExpressionAST
         │   │   ├── left: NumberLiteralExpressionAST
         │   │   │   └── value: 1
@@ -55,7 +72,7 @@ program
         │   │   └── statements
         │   │       └── 0: PassStatementAST
         │   └── else_body: None
-        ├── 3: IfStatementAST
+        ├── 4: IfStatementAST
         │   ├── condition: BinaryExpressionAST
         │   │   ├── left: NumberLiteralExpressionAST
         │   │   │   └── value: 1
@@ -66,7 +83,7 @@ program
         │   │   └── statements
         │   │       └── 0: PassStatementAST
         │   └── else_body: None
-        ├── 4: IfStatementAST
+        ├── 5: IfStatementAST
         │   ├── condition: BinaryExpressionAST
         │   │   ├── left: NumberLiteralExpressionAST
         │   │   │   └── value: 1
@@ -77,7 +94,7 @@ program
         │   │   └── statements
         │   │       └── 0: PassStatementAST
         │   └── else_body: None
-        ├── 5: IfStatementAST
+        ├── 6: IfStatementAST
         │   ├── condition: BinaryExpressionAST
         │   │   ├── left: NumberLiteralExpressionAST
         │   │   │   └── value: 1
@@ -88,13 +105,35 @@ program
         │   │   └── statements
         │   │       └── 0: PassStatementAST
         │   └── else_body: None
-        └── 6: IfStatementAST
+        ├── 7: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: ">="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 8: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NameLiteralExpressionAST
+        │   │   │   └── value: "x"
+        │   │   ├── operator: "is"
+        │   │   └── right: NameLiteralExpressionAST
+        │   │       └── value: "x"
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        └── 9: IfStatementAST
             ├── condition: BinaryExpressionAST
-            │   ├── left: NumberLiteralExpressionAST
-            │   │   └── value: 1
-            │   ├── operator: ">="
-            │   └── right: NumberLiteralExpressionAST
-            │       └── value: 1
+            │   ├── left: NameLiteralExpressionAST
+            │   │   └── value: "x"
+            │   ├── operator: "is not"
+            │   └── right: NameLiteralExpressionAST
+            │       └── value: "x"
             ├── body: MultipleStatementAST
             │   └── statements
             │       └── 0: PassStatementAST
@@ -110,49 +149,74 @@ target triple = "unknown-unknown-unknown"
 define i32 @main() {
 entry:
   %.2 = icmp eq i32 1, 1
-  %x = alloca i1, align 1
-  store i1 %.2, i1* %x, align 1
-  %.4 = icmp eq i32 1, 1
-  br i1 %.4, label %entry.if.true, label %entry.if.end
+  br i1 %.2, label %entry.if.true, label %entry.if.end
 
 entry.if.true:                                    ; preds = %entry
   br label %entry.if.end
 
 entry.if.end:                                     ; preds = %entry.if.true, %entry
-  %.7 = icmp ne i32 1, 1
+  %.5 = icmp eq i32 1, 1
+  %x = alloca i1, align 1
+  store i1 %.5, i1* %x, align 1
+  %.7 = icmp eq i32 1, 1
   br i1 %.7, label %entry.if.end.if.true, label %entry.if.end.if.end
 
 entry.if.end.if.true:                             ; preds = %entry.if.end
   br label %entry.if.end.if.end
 
 entry.if.end.if.end:                              ; preds = %entry.if.end.if.true, %entry.if.end
-  %.10 = icmp slt i32 1, 1
+  %.10 = icmp ne i32 1, 1
   br i1 %.10, label %entry.if.end.if.end.if.true, label %entry.if.end.if.end.if.end
 
 entry.if.end.if.end.if.true:                      ; preds = %entry.if.end.if.end
   br label %entry.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end:                       ; preds = %entry.if.end.if.end.if.true, %entry.if.end.if.end
-  %.13 = icmp sgt i32 1, 1
+  %.13 = icmp slt i32 1, 1
   br i1 %.13, label %entry.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end.if.true:               ; preds = %entry.if.end.if.end.if.end
   br label %entry.if.end.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end.if.end:                ; preds = %entry.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end
-  %.16 = icmp sle i32 1, 1
+  %.16 = icmp sgt i32 1, 1
   br i1 %.16, label %entry.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end.if.end.if.true:        ; preds = %entry.if.end.if.end.if.end.if.end
   br label %entry.if.end.if.end.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end.if.end.if.end:         ; preds = %entry.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end
-  %.19 = icmp sge i32 1, 1
+  %.19 = icmp sle i32 1, 1
   br i1 %.19, label %entry.if.end.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end.if.end.if.end.if.true: ; preds = %entry.if.end.if.end.if.end.if.end.if.end
   br label %entry.if.end.if.end.if.end.if.end.if.end.if.end
 
 entry.if.end.if.end.if.end.if.end.if.end.if.end:  ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end.if.end
+  %.22 = icmp sge i32 1, 1
+  br i1 %.22, label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end.if.true: ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end: ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end.if.end.if.end
+  %.25 = load i1, i1* %x, align 1
+  %.26 = load i1, i1* %x, align 1
+  %.27 = icmp eq i1 %.25, %.26
+  br i1 %.27, label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.true: ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end: ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+  %.30 = load i1, i1* %x, align 1
+  %.31 = load i1, i1* %x, align 1
+  %.32 = icmp ne i1 %.30, %.31
+  br i1 %.32, label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.true: ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end: ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end.if.end.if.end.if.end.if.end
   ret i32 0
 }
