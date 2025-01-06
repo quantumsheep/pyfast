@@ -468,6 +468,8 @@ class Visitor:
                 return self.walk_unary_expression(scope, builder, expression)
             case ast.BinaryExpressionAST():
                 return self.walk_binary_expression(scope, builder, expression)
+            case ast.TupleExpressionAST():
+                return self.walk_tuple_expression(scope, builder, expression)
             case _:
                 raise FeatureNotImplementedError(expression)
 
@@ -587,10 +589,22 @@ class Visitor:
                 return cast(ir.NamedValue, builder.icmp_signed(">=", left, right))
             case ">":
                 return cast(ir.NamedValue, builder.icmp_signed(">", left, right))
+            case "is":
+                return cast(ir.NamedValue, builder.icmp_signed("==", left, right))
+            case "is not":
+                return cast(ir.NamedValue, builder.icmp_signed("!=", left, right))
             case _:
                 raise FeatureNotImplementedError(
                     expression, f"operator {expression.operator}"
                 )
+
+    def walk_tuple_expression(
+        self,
+        scope: Scope,
+        builder: ir.IRBuilder,
+        expression: ast.TupleExpressionAST,
+    ) -> IRValue:
+        raise FeatureNotImplementedError(expression)
 
     # if isinstance(expression, ast.CombinatoryStringLiteralExpressionAST):
     #     for value in expression.values:
