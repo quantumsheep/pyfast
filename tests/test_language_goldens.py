@@ -7,7 +7,7 @@ from compiler import compiler
 from parser import ast
 from parser.driver import parse
 
-UPDATE_GOLDENS = os.environ.get("UPDATE_GOLDENS", False)
+UPDATE_GOLDENS = os.environ.get("UPDATE_GOLDENS") == "true"
 
 
 def run_golden(filename: str):
@@ -30,15 +30,16 @@ def run_golden(filename: str):
         f"IR:",
         str(verified_module),
     ]
+    expected = "\n".join(lines)
 
     if UPDATE_GOLDENS or not os.path.exists(f"{filename}.golden"):
         with open(f"{filename}.golden", "w") as f:
-            f.write("\n".join(lines))
+            f.write(expected)
     else:
         with open(f"{filename}.golden", "r") as f:
-            golden = f.read().splitlines()
+            golden = f.read()
 
-        assert lines == golden
+        assert expected == golden
 
 
 for filename in os.listdir("tests/testdata/language"):
