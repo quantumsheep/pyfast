@@ -1905,7 +1905,28 @@ class Visitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by PythonParser#tuple.
     def visitTuple(self, ctx: PythonParser.TupleContext):
-        raise FeatureNotImplementedError(ctx)
+        tuple_ast = ast.TupleExpressionAST(
+            source_position=get_source_position(ctx),
+            elements=[],
+        )
+
+        if star_named_expression_ctx := cast(
+            Union[PythonParser.Star_named_expressionContext, None],
+            ctx.star_named_expression(),
+        ):
+            tuple_ast.elements.append(
+                self.visitStar_named_expression(star_named_expression_ctx)
+            )
+
+        if star_named_expressions_ctx := cast(
+            Union[PythonParser.Star_named_expressionsContext, None],
+            ctx.star_named_expressions(),
+        ):
+            tuple_ast.elements.extend(
+                self.visitStar_named_expressions(star_named_expressions_ctx)
+            )
+
+        return tuple_ast
 
     # Visit a parse tree produced by PythonParser#set.
     def visitSet(self, ctx: PythonParser.SetContext):

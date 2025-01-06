@@ -136,6 +136,18 @@ class ListExpressionAST(ExpressionAST):
 
 
 @dataclass(kw_only=True)
+class TupleExpressionAST(ExpressionAST):
+    elements: list[ExpressionAST]
+
+    def __str__(self) -> str:
+        elements = ", ".join(str(element) for element in self.elements)
+        if len(self.elements) == 1:
+            return f"({elements},)"
+
+        return f"({elements})"
+
+
+@dataclass(kw_only=True)
 class SliceAST(AST):
     start: ExpressionAST | None = None
     stop: ExpressionAST | None = None
