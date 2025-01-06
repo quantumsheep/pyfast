@@ -5,12 +5,15 @@ from treelib import Tree
 from parser.ast.base import SourceFile, SourcePosition
 
 
-def to_tree(instance: object) -> Tree:
+def to_tree(instance: object, escape: bool = False) -> Tree:
     tree = Tree()
 
     def format_value(value: object) -> str:
         if isinstance(value, str):
-            return f'"{value}"'.translate(str.maketrans({'"': r"\""}))
+            formatted = f'"{value}"'
+            if escape:
+                formatted = formatted.translate(str.maketrans({'"': r"\""}))
+            return formatted
         return str(value)
 
     def _to_tree(instance: object, parent_id: str) -> None:

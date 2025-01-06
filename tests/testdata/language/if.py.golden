@@ -1,0 +1,215 @@
+Code with transformations:
+if 1 == 1:
+    pass
+if 1 == 1:
+    pass
+else:
+    pass
+if 1 == 2:
+    pass
+else:
+    if 1 == 2:
+        pass
+if 1 == 2:
+    pass
+else:
+    if 1 == 2:
+        pass
+    else:
+        if 1 == 2:
+            pass
+        else:
+            if 1 == 2:
+                pass
+            else:
+                pass
+
+--------------------------------------------------------------------------------
+AST:
+program
+├── file: SourceFile
+│   └── filename: "tests/testdata/language/if.py"
+└── statements: MultipleStatementAST
+    └── statements
+        ├── 0: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "=="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 1: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "=="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: MultipleStatementAST
+        │       └── statements
+        │           └── 0: PassStatementAST
+        ├── 2: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "=="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 2
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: MultipleStatementAST
+        │       └── statements
+        │           └── 0: IfStatementAST
+        │               ├── condition: BinaryExpressionAST
+        │               │   ├── left: NumberLiteralExpressionAST
+        │               │   │   └── value: 1
+        │               │   ├── operator: "=="
+        │               │   └── right: NumberLiteralExpressionAST
+        │               │       └── value: 2
+        │               ├── body: MultipleStatementAST
+        │               │   └── statements
+        │               │       └── 0: PassStatementAST
+        │               └── else_body: None
+        └── 3: IfStatementAST
+            ├── condition: BinaryExpressionAST
+            │   ├── left: NumberLiteralExpressionAST
+            │   │   └── value: 1
+            │   ├── operator: "=="
+            │   └── right: NumberLiteralExpressionAST
+            │       └── value: 2
+            ├── body: MultipleStatementAST
+            │   └── statements
+            │       └── 0: PassStatementAST
+            └── else_body: MultipleStatementAST
+                └── statements
+                    └── 0: IfStatementAST
+                        ├── condition: BinaryExpressionAST
+                        │   ├── left: NumberLiteralExpressionAST
+                        │   │   └── value: 1
+                        │   ├── operator: "=="
+                        │   └── right: NumberLiteralExpressionAST
+                        │       └── value: 2
+                        ├── body: MultipleStatementAST
+                        │   └── statements
+                        │       └── 0: PassStatementAST
+                        └── else_body: MultipleStatementAST
+                            └── statements
+                                └── 0: IfStatementAST
+                                    ├── condition: BinaryExpressionAST
+                                    │   ├── left: NumberLiteralExpressionAST
+                                    │   │   └── value: 1
+                                    │   ├── operator: "=="
+                                    │   └── right: NumberLiteralExpressionAST
+                                    │       └── value: 2
+                                    ├── body: MultipleStatementAST
+                                    │   └── statements
+                                    │       └── 0: PassStatementAST
+                                    └── else_body: MultipleStatementAST
+                                        └── statements
+                                            └── 0: IfStatementAST
+                                                ├── condition: BinaryExpressionAST
+                                                │   ├── left: NumberLiteralExpressionAST
+                                                │   │   └── value: 1
+                                                │   ├── operator: "=="
+                                                │   └── right: NumberLiteralExpressionAST
+                                                │       └── value: 2
+                                                ├── body: MultipleStatementAST
+                                                │   └── statements
+                                                │       └── 0: PassStatementAST
+                                                └── else_body: MultipleStatementAST
+                                                    └── statements
+                                                        └── 0: PassStatementAST
+
+
+--------------------------------------------------------------------------------
+IR:
+; ModuleID = '<string>'
+source_filename = "<string>"
+target triple = "unknown-unknown-unknown"
+
+define i32 @main() {
+entry:
+  %.2 = icmp eq i32 1, 1
+  br i1 %.2, label %entry.if.true, label %entry.if.end
+
+entry.if.true:                                    ; preds = %entry
+  br label %entry.if.end
+
+entry.if.end:                                     ; preds = %entry.if.true, %entry
+  %.5 = icmp eq i32 1, 1
+  br i1 %.5, label %entry.if.end.if.true, label %entry.if.end.if.false
+
+entry.if.end.if.true:                             ; preds = %entry.if.end
+  br label %entry.if.end.if.end
+
+entry.if.end.if.false:                            ; preds = %entry.if.end
+  br label %entry.if.end.if.end
+
+entry.if.end.if.end:                              ; preds = %entry.if.end.if.false, %entry.if.end.if.true
+  %.9 = icmp eq i32 1, 2
+  br i1 %.9, label %entry.if.end.if.end.if.true, label %entry.if.end.if.end.if.false
+
+entry.if.end.if.end.if.true:                      ; preds = %entry.if.end.if.end
+  br label %entry.if.end.if.end.if.end
+
+entry.if.end.if.end.if.false:                     ; preds = %entry.if.end.if.end
+  %.10 = icmp eq i32 1, 2
+  br i1 %.10, label %entry.if.end.if.end.if.false.if.true, label %entry.if.end.if.end.if.false.if.end
+
+entry.if.end.if.end.if.false.if.true:             ; preds = %entry.if.end.if.end.if.false
+  br label %entry.if.end.if.end.if.false.if.end
+
+entry.if.end.if.end.if.false.if.end:              ; preds = %entry.if.end.if.end.if.false.if.true, %entry.if.end.if.end.if.false
+  br label %entry.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end:                       ; preds = %entry.if.end.if.end.if.false.if.end, %entry.if.end.if.end.if.true
+  %.16 = icmp eq i32 1, 2
+  br i1 %.16, label %entry.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.false
+
+entry.if.end.if.end.if.end.if.true:               ; preds = %entry.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.false:              ; preds = %entry.if.end.if.end.if.end
+  %.17 = icmp eq i32 1, 2
+  br i1 %.17, label %entry.if.end.if.end.if.end.if.false.if.true, label %entry.if.end.if.end.if.end.if.false.if.false
+
+entry.if.end.if.end.if.end.if.false.if.true:      ; preds = %entry.if.end.if.end.if.end.if.false
+  br label %entry.if.end.if.end.if.end.if.false.if.end
+
+entry.if.end.if.end.if.end.if.false.if.false:     ; preds = %entry.if.end.if.end.if.end.if.false
+  %.18 = icmp eq i32 1, 2
+  br i1 %.18, label %entry.if.end.if.end.if.end.if.false.if.false.if.true, label %entry.if.end.if.end.if.end.if.false.if.false.if.false
+
+entry.if.end.if.end.if.end.if.false.if.false.if.true: ; preds = %entry.if.end.if.end.if.end.if.false.if.false
+  br label %entry.if.end.if.end.if.end.if.false.if.false.if.end
+
+entry.if.end.if.end.if.end.if.false.if.false.if.false: ; preds = %entry.if.end.if.end.if.end.if.false.if.false
+  %.19 = icmp eq i32 1, 2
+  br i1 %.19, label %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.true, label %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.false
+
+entry.if.end.if.end.if.end.if.false.if.false.if.false.if.true: ; preds = %entry.if.end.if.end.if.end.if.false.if.false.if.false
+  br label %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.end
+
+entry.if.end.if.end.if.end.if.false.if.false.if.false.if.false: ; preds = %entry.if.end.if.end.if.end.if.false.if.false.if.false
+  br label %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.end
+
+entry.if.end.if.end.if.end.if.false.if.false.if.false.if.end: ; preds = %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.false, %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.true
+  br label %entry.if.end.if.end.if.end.if.false.if.false.if.end
+
+entry.if.end.if.end.if.end.if.false.if.false.if.end: ; preds = %entry.if.end.if.end.if.end.if.false.if.false.if.false.if.end, %entry.if.end.if.end.if.end.if.false.if.false.if.true
+  br label %entry.if.end.if.end.if.end.if.false.if.end
+
+entry.if.end.if.end.if.end.if.false.if.end:       ; preds = %entry.if.end.if.end.if.end.if.false.if.false.if.end, %entry.if.end.if.end.if.end.if.false.if.true
+  br label %entry.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end:                ; preds = %entry.if.end.if.end.if.end.if.false.if.end, %entry.if.end.if.end.if.end.if.true
+  ret i32 0
+}

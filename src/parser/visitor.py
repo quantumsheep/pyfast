@@ -36,10 +36,21 @@ class Visitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by PythonParser#file_input.
     def visitFile_input(self, ctx: PythonParser.File_inputContext) -> ast.ProgramAST:
-        statements_ast = self.visitStatements(ctx.statements())
+        if statements_ctx := cast(
+            Union[PythonParser.StatementsContext, None], ctx.statements()
+        ):
+            statements_ast = self.visitStatements(ctx.statements())
+            return ast.ProgramAST(
+                file=get_source_file(ctx.start.source[1]),
+                statements=statements_ast,
+            )
+
         return ast.ProgramAST(
             file=get_source_file(ctx.start.source[1]),
-            statements=statements_ast,
+            statements=ast.MultipleStatementAST[ast.StatementAST](
+                source_position=get_source_position(ctx),
+                statements=[],
+            ),
         )
 
     # Visit a parse tree produced by PythonParser#interactive.
@@ -61,19 +72,22 @@ class Visitor(ParseTreeVisitor):
     # Visit a parse tree produced by PythonParser#statements.
     def visitStatements(
         self, ctx: PythonParser.StatementsContext
-    ) -> list[ast.StatementAST]:
-        asts = list[ast.StatementAST]()
+    ) -> ast.MultipleStatementAST[ast.StatementAST]:
+        statements_ast = ast.MultipleStatementAST[ast.StatementAST](
+            source_position=get_source_position(ctx),
+            statements=[],
+        )
         statements_ctx = cast(list[PythonParser.StatementContext], ctx.statement())
 
         for statement in statements_ctx:
-            asts.extend(self.visitStatement(statement))
+            statements_ast.statements.extend(self.visitStatement(statement).statements)
 
-        return asts
+        return statements_ast
 
     # Visit a parse tree produced by PythonParser#statement.
     def visitStatement(
         self, ctx: PythonParser.StatementContext
-    ) -> list[ast.StatementAST]:
+    ) -> ast.MultipleStatementAST[ast.StatementAST]:
         if simple_stmts_ctx := cast(
             Union[PythonParser.Simple_stmtsContext, None], ctx.simple_stmts()
         ):
@@ -82,7 +96,10 @@ class Visitor(ParseTreeVisitor):
         if compound_stmt_ctx := cast(
             Union[PythonParser.Compound_stmtContext, None], ctx.compound_stmt()
         ):
-            return [self.visitCompound_stmt(compound_stmt_ctx)]
+            return ast.MultipleStatementAST(
+                source_position=get_source_position(ctx),
+                statements=[self.visitCompound_stmt(compound_stmt_ctx)],
+            )
 
         raise FeatureNotImplementedError(ctx)
 
@@ -93,14 +110,17 @@ class Visitor(ParseTreeVisitor):
     # Visit a parse tree produced by PythonParser#simple_stmts.
     def visitSimple_stmts(
         self, ctx: PythonParser.Simple_stmtsContext
-    ) -> list[ast.StatementAST]:
-        asts = list[ast.StatementAST]()
+    ) -> ast.MultipleStatementAST[ast.StatementAST]:
+        statements_ast = ast.MultipleStatementAST[ast.StatementAST](
+            source_position=get_source_position(ctx),
+            statements=[],
+        )
         simple_stmt_ctx = cast(list[PythonParser.Simple_stmtContext], ctx.simple_stmt())
 
         for simple_stmt in simple_stmt_ctx:
-            asts.append(self.visitSimple_stmt(simple_stmt))
+            statements_ast.statements.append(self.visitSimple_stmt(simple_stmt))
 
-        return asts
+        return statements_ast
 
     # Visit a parse tree produced by PythonParser#simple_stmt.
     def visitSimple_stmt(
@@ -506,7 +526,7 @@ class Visitor(ParseTreeVisitor):
         )
 
     # Visit a parse tree produced by PythonParser#block.
-    def visitBlock(self, ctx: PythonParser.BlockContext):
+    def visitBlock(self, ctx: PythonParser.BlockContext) -> ast.MultipleStatementAST:
         if statements_ctx := cast(
             Union[PythonParser.StatementsContext, None], ctx.statements()
         ):
@@ -775,7 +795,10 @@ class Visitor(ParseTreeVisitor):
         if elifs_ctx := cast(
             Union[PythonParser.Elif_stmtContext, None], ctx.elif_stmt()
         ):
-            if_statement_ast.else_body = [self.visitElif_stmt(elifs_ctx)]
+            if_statement_ast.else_body = ast.MultipleStatementAST(
+                source_position=get_source_position(ctx),
+                statements=[self.visitElif_stmt(elifs_ctx)],
+            )
 
         if else_block_ctx := cast(
             Union[PythonParser.Else_blockContext, None], ctx.else_block()
@@ -785,7 +808,7 @@ class Visitor(ParseTreeVisitor):
         return if_statement_ast
 
     # Visit a parse tree produced by PythonParser#elif_stmt.
-    def visitElif_stmt(self, ctx: PythonParser.Elif_stmtContext):
+    def visitElif_stmt(self, ctx: PythonParser.Elif_stmtContext) -> ast.IfStatementAST:
         condition = self.visitNamed_expression(ctx.named_expression())
         body = self.visitBlock(ctx.block())
 
@@ -798,7 +821,10 @@ class Visitor(ParseTreeVisitor):
         if elif_ctx := cast(
             Union[PythonParser.Elif_stmtContext, None], ctx.elif_stmt()
         ):
-            if_statement_ast.else_body = [self.visitElif_stmt(elif_ctx)]
+            if_statement_ast.else_body = ast.MultipleStatementAST(
+                source_position=get_source_position(ctx),
+                statements=[self.visitElif_stmt(elif_ctx)],
+            )
 
         if else_block_ctx := cast(
             Union[PythonParser.Else_blockContext, None], ctx.else_block()
@@ -808,7 +834,9 @@ class Visitor(ParseTreeVisitor):
         return if_statement_ast
 
     # Visit a parse tree produced by PythonParser#else_block.
-    def visitElse_block(self, ctx: PythonParser.Else_blockContext) -> list[ast.StatementAST]:
+    def visitElse_block(
+        self, ctx: PythonParser.Else_blockContext
+    ) -> ast.MultipleStatementAST[ast.StatementAST]:
         return self.visitBlock(ctx.block())
 
     # Visit a parse tree produced by PythonParser#while_stmt.

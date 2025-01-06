@@ -191,7 +191,7 @@ class Visitor:
         if program_ast.file.filename is not None:
             self.imported_modules.add(program_ast.file.filename)
 
-        for statement in program_ast.statements:
+        for statement in program_ast.statements.statements:
             self.walk_statement(scope, self.main_builder, statement)
 
     def walk_statement(
@@ -222,6 +222,8 @@ class Visitor:
                 self.walk_if_statement(scope, builder, statement)
             case ast.WhileStatementAST():
                 self.walk_while_statement(scope, builder, statement)
+            case ast.ForStatementAST():
+                self.walk_for_statement(scope, builder, statement)
             case ast.BreakStatementAST():
                 self.walk_break_statement(scope, builder, statement)
             case ast.ContinueStatementAST():
@@ -360,24 +362,24 @@ class Visitor:
         if isinstance(condition, ir.Type):
             raise SourceError(statement, "cannot use type as condition")
 
-        if len(statement.else_body) > 0:
+        if statement.else_body:
             if_else_generator = if_else(builder, condition)
 
             # If block
             next(if_else_generator)
-            for sub_statement in statement.body:
+            for sub_statement in statement.body.statements:
                 self.walk_statement(scope, builder, sub_statement)
 
             # Else block
             next(if_else_generator)
-            for sub_statement in statement.else_body:
+            for sub_statement in statement.else_body.statements:
                 self.walk_statement(scope, builder, sub_statement)
 
             # End if block
             next(if_else_generator, None)
         else:
             with if_then(builder, condition):
-                for sub_statement in statement.body:
+                for sub_statement in statement.body.statements:
                     self.walk_statement(scope, builder, sub_statement)
 
     def walk_while_statement(
@@ -397,25 +399,33 @@ class Visitor:
         if isinstance(condition, ir.Type):
             raise SourceError(statement, "cannot use type as condition")
 
-        if len(statement.else_body) > 0:
+        if statement.else_body:
             while_else_generator = while_else(scope, builder, condition)
 
             # While block
             while_scope = next(while_else_generator)
-            for sub_statement in statement.body:
+            for sub_statement in statement.body.statements:
                 self.walk_statement(while_scope, builder, sub_statement)
 
             # Else block
             else_scope = next(while_else_generator)
-            for sub_statement in statement.else_body:
+            for sub_statement in statement.else_body.statements:
                 self.walk_statement(else_scope, builder, sub_statement)
 
             # End if block
             next(while_else_generator, None)
         else:
             with while_then(scope, builder, condition) as while_scope:
-                for sub_statement in statement.body:
+                for sub_statement in statement.body.statements:
                     self.walk_statement(while_scope, builder, sub_statement)
+
+    def walk_for_statement(
+        self,
+        scope: Scope,
+        builder: ir.IRBuilder,
+        statement: ast.ForStatementAST,
+    ):
+        raise FeatureNotImplementedError(statement)
 
     def walk_break_statement(
         self,
@@ -510,6 +520,12 @@ class Visitor:
         value = self.walk_expression(scope, builder, expression.expression)
 
         match expression.operator:
+            case "+":
+                return value
+            case "-":
+                return cast(ir.NamedValue, builder.sub(PyTypeInt32.llvm_type(0), value))
+            case "~":
+                return cast(ir.NamedValue, builder.not_(value))
             case _:
                 raise FeatureNotImplementedError(
                     expression, f"operator {expression.operator}"

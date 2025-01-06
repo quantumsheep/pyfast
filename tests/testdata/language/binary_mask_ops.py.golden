@@ -1,0 +1,70 @@
+Code with transformations:
+x = 1 & 1
+x = 1 ^ 1
+x = 1 | 1
+
+--------------------------------------------------------------------------------
+AST:
+program
+├── file: SourceFile
+│   └── filename: "tests/testdata/language/binary_mask_ops.py"
+└── statements: MultipleStatementAST
+    └── statements
+        ├── 0: AssignmentStatementAST
+        │   ├── targets
+        │   │   └── 0: NameLiteralExpressionAST
+        │   │       └── value: "x"
+        │   ├── type: None
+        │   ├── operator: "="
+        │   └── values
+        │       └── 0: BinaryExpressionAST
+        │           ├── left: NumberLiteralExpressionAST
+        │           │   └── value: 1
+        │           ├── operator: "&"
+        │           └── right: NumberLiteralExpressionAST
+        │               └── value: 1
+        ├── 1: AssignmentStatementAST
+        │   ├── targets
+        │   │   └── 0: NameLiteralExpressionAST
+        │   │       └── value: "x"
+        │   ├── type: None
+        │   ├── operator: "="
+        │   └── values
+        │       └── 0: BinaryExpressionAST
+        │           ├── left: NumberLiteralExpressionAST
+        │           │   └── value: 1
+        │           ├── operator: "^"
+        │           └── right: NumberLiteralExpressionAST
+        │               └── value: 1
+        └── 2: AssignmentStatementAST
+            ├── targets
+            │   └── 0: NameLiteralExpressionAST
+            │       └── value: "x"
+            ├── type: None
+            ├── operator: "="
+            └── values
+                └── 0: BinaryExpressionAST
+                    ├── left: NumberLiteralExpressionAST
+                    │   └── value: 1
+                    ├── operator: "|"
+                    └── right: NumberLiteralExpressionAST
+                        └── value: 1
+
+
+--------------------------------------------------------------------------------
+IR:
+; ModuleID = '<string>'
+source_filename = "<string>"
+target triple = "unknown-unknown-unknown"
+
+define i32 @main() {
+entry:
+  %.2 = and i32 1, 1
+  %x = alloca i32, align 4
+  store i32 %.2, i32* %x, align 4
+  %.4 = xor i32 1, 1
+  store i32 %.4, i32* %x, align 4
+  %.6 = or i32 1, 1
+  store i32 %.6, i32* %x, align 4
+  ret i32 0
+}

@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import os
 
@@ -46,5 +47,8 @@ class SourcePosition:
 
 
 @dataclass(kw_only=True)
-class AST:
+class AST(ABC):
     source_position: SourcePosition
+
+    @abstractmethod
+    def __str__(self) -> str: ...

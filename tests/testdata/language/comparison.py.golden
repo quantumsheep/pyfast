@@ -1,0 +1,158 @@
+Code with transformations:
+x = 1 == 1
+if 1 == 1:
+    pass
+if 1 != 1:
+    pass
+if 1 < 1:
+    pass
+if 1 > 1:
+    pass
+if 1 <= 1:
+    pass
+if 1 >= 1:
+    pass
+
+--------------------------------------------------------------------------------
+AST:
+program
+├── file: SourceFile
+│   └── filename: "tests/testdata/language/comparison.py"
+└── statements: MultipleStatementAST
+    └── statements
+        ├── 0: AssignmentStatementAST
+        │   ├── targets
+        │   │   └── 0: NameLiteralExpressionAST
+        │   │       └── value: "x"
+        │   ├── type: None
+        │   ├── operator: "="
+        │   └── values
+        │       └── 0: BinaryExpressionAST
+        │           ├── left: NumberLiteralExpressionAST
+        │           │   └── value: 1
+        │           ├── operator: "=="
+        │           └── right: NumberLiteralExpressionAST
+        │               └── value: 1
+        ├── 1: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "=="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 2: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "!="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 3: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "<"
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 4: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: ">"
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        ├── 5: IfStatementAST
+        │   ├── condition: BinaryExpressionAST
+        │   │   ├── left: NumberLiteralExpressionAST
+        │   │   │   └── value: 1
+        │   │   ├── operator: "<="
+        │   │   └── right: NumberLiteralExpressionAST
+        │   │       └── value: 1
+        │   ├── body: MultipleStatementAST
+        │   │   └── statements
+        │   │       └── 0: PassStatementAST
+        │   └── else_body: None
+        └── 6: IfStatementAST
+            ├── condition: BinaryExpressionAST
+            │   ├── left: NumberLiteralExpressionAST
+            │   │   └── value: 1
+            │   ├── operator: ">="
+            │   └── right: NumberLiteralExpressionAST
+            │       └── value: 1
+            ├── body: MultipleStatementAST
+            │   └── statements
+            │       └── 0: PassStatementAST
+            └── else_body: None
+
+
+--------------------------------------------------------------------------------
+IR:
+; ModuleID = '<string>'
+source_filename = "<string>"
+target triple = "unknown-unknown-unknown"
+
+define i32 @main() {
+entry:
+  %.2 = icmp eq i32 1, 1
+  %x = alloca i1, align 1
+  store i1 %.2, i1* %x, align 1
+  %.4 = icmp eq i32 1, 1
+  br i1 %.4, label %entry.if.true, label %entry.if.end
+
+entry.if.true:                                    ; preds = %entry
+  br label %entry.if.end
+
+entry.if.end:                                     ; preds = %entry.if.true, %entry
+  %.7 = icmp ne i32 1, 1
+  br i1 %.7, label %entry.if.end.if.true, label %entry.if.end.if.end
+
+entry.if.end.if.true:                             ; preds = %entry.if.end
+  br label %entry.if.end.if.end
+
+entry.if.end.if.end:                              ; preds = %entry.if.end.if.true, %entry.if.end
+  %.10 = icmp slt i32 1, 1
+  br i1 %.10, label %entry.if.end.if.end.if.true, label %entry.if.end.if.end.if.end
+
+entry.if.end.if.end.if.true:                      ; preds = %entry.if.end.if.end
+  br label %entry.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end:                       ; preds = %entry.if.end.if.end.if.true, %entry.if.end.if.end
+  %.13 = icmp sgt i32 1, 1
+  br i1 %.13, label %entry.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.true:               ; preds = %entry.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end:                ; preds = %entry.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end
+  %.16 = icmp sle i32 1, 1
+  br i1 %.16, label %entry.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.true:        ; preds = %entry.if.end.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end:         ; preds = %entry.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end
+  %.19 = icmp sge i32 1, 1
+  br i1 %.19, label %entry.if.end.if.end.if.end.if.end.if.end.if.true, label %entry.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.true: ; preds = %entry.if.end.if.end.if.end.if.end.if.end
+  br label %entry.if.end.if.end.if.end.if.end.if.end.if.end
+
+entry.if.end.if.end.if.end.if.end.if.end.if.end:  ; preds = %entry.if.end.if.end.if.end.if.end.if.end.if.true, %entry.if.end.if.end.if.end.if.end.if.end
+  ret i32 0
+}

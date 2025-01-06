@@ -5,3 +5,7 @@ generate:
 
 	@echo "Adding # type: ignore to the generated files..."
 	@sed -i '' '1s/^/# type: ignore\n/' src/parser/grammar/*.py
+
+.PHONY: test
+test:
+	@poetry run pytest --no-header -v --tb=line
